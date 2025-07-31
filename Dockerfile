@@ -1,19 +1,27 @@
-# Use an official JDK image to build and run the app
-FROM openjdk:21-jdk-slim
-
-# Set working directory inside the container
-WORKDIR /app
-
-# Copy the built JAR file into the container
-COPY target/fellner-finance-0.0.1-SNAPSHOT.jar app.jar
-
-# Expose port 8080 to the host
-EXPOSE 8080
-
-
-# Security improvement
-RUN useradd -m appuser
-USER appuser
-
-# Run the JAR
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# ---- Build Stage ----
+    FROM maven:3.9.6-eclipse-temurin-21 AS builder
+    WORKDIR /app
+    
+    # Copy pom.xml and download dependencies first (caching)
+    COPY pom.xml .
+    RUN mvn dependency:go-offline
+    
+    # Copy all source code
+    COPY src ./src
+    
+    # Build the application (skipping tests for speed)
+    RUN mvn clean package -DskipTests
+    
+    # ---- Runtime Stage ----
+    FROM eclipse-temurin:21-jdk-jammy
+    WORKDIR /app
+    
+    # Add a non-root user
+    RUN useradd -m appuser
+    USER appuser
+    
+    # Copy the built jar from the builder stage
+    COPY --from=builder /app/target/*.jar app.jar
+    
+    EXPOSE 8080
+    ENTRYPOINT ["java", "-jar", "app.jar"]
